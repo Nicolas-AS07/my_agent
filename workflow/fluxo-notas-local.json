@@ -1,0 +1,136 @@
+{
+  "nodes": [
+    {
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "fluxo-notas-local"
+      }
+    },
+    {
+      "name": "Extrair Pergunta",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "language": "python",
+        "mode": "runOnceForAllItems",
+        "code": "items = _input.all()\nif items:\n    data = items[0].json\n    pergunta = data.get('body', {}).get('pergunta') or data.get('pergunta')\n    return [{ json: { perguntaSentenca: pergunta } }]\nreturn []"
+      }
+    },
+    {
+      "name": "Ler CSV Cabeçalho",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "parameters": {
+        "filePath": "/home/node/app/dados/202401_NFs_Cabecalho.csv"
+      }
+    },
+    {
+      "name": "Extrair Cabeçalho",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "parameters": {
+        "operation": "extractFromFile",
+        "binaryPropertyName": "data",
+        "fileType": "csv",
+        "hasHeader": true
+      }
+    },
+    {
+      "name": "Ler CSV Itens",
+      "type": "n8n-nodes-base.readBinaryFile",
+      "parameters": {
+        "filePath": "/home/node/app/dados/202401_NFs_Itens.csv"
+      }
+    },
+    {
+      "name": "Extrair Itens",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "parameters": {
+        "operation": "extractFromFile",
+        "binaryPropertyName": "data",
+        "fileType": "csv",
+        "hasHeader": true
+      }
+    },
+    {
+      "name": "Agrega Cabeçalho",
+      "type": "n8n-nodes-base.aggregate",
+      "parameters": {
+        "mode": "individualFields",
+        "fields": [
+          {
+            "inputFieldName": "valor",
+            "operation": "sum",
+            "outputFieldName": "totalGasto"
+          },
+          {
+            "inputFieldName": "valor",
+            "operation": "average",
+            "outputFieldName": "mediaValor"
+          },
+          {
+            "inputFieldName": "nota_id",
+            "operation": "count",
+            "outputFieldName": "quantidadeNotas"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Agrega Itens",
+      "type": "n8n-nodes-base.aggregate",
+      "parameters": {
+        "mode": "individualFields",
+        "fields": [
+          {
+            "inputFieldName": "item_valor",
+            "operation": "sum",
+            "outputFieldName": "totalValorItens"
+          },
+          {
+            "inputFieldName": "item_quantidade",
+            "operation": "sum",
+            "outputFieldName": "quantidadeItens"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Modelo Local",
+      "type": "n8n-nodes-base.openAIApi",
+      "parameters": {
+        "baseURL": "http://localhost:8080",
+        "model": "mistral-7b-instruct-v0.2.Q4_K_M",
+        "messages": [
+          {
+            "role": "system",
+            "content": "Você é um assistente que responde perguntas sobre notas fiscais e itens correspondentes."
+          },
+          {
+            "role": "user",
+            "content": "Pergunta: {{$node['Extrair Pergunta'].json.perguntaSentenca}}\n\nDados resumo:\n- Total gasto (notas): {{$node['Agrega Cabeçalho'].json.totalGasto}}\n- Média por nota: {{$node['Agrega Cabeçalho'].json.mediaValor}}\n- Quantidade de notas: {{$node['Agrega Cabeçalho'].json.quantidadeNotas}}\n- Total valor de itens: {{$node['Agrega Itens'].json.totalValorItens}}\n- Quantidade total de itens: {{$node['Agrega Itens'].json.quantidadeItens}}\n\nResponda de forma clara e objetiva."
+          }
+        ]
+      }
+    },
+    {
+      "name": "Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "parameters": {
+        "statusCode": 200,
+        "dataPropertyName": "resposta",
+        "responseBody": "={{ $node['Modelo Local'].json.choices[0].message.content }}"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": { "main": [[{"node":"Extrair Pergunta","type":"main","index":0}]] },
+    "Extrair Pergunta": { "main": [[{"node":"Ler CSV Cabeçalho","type":"main","index":0}]] },
+    "Ler CSV Cabeçalho": { "main": [[{"node":"Extrair Cabeçalho","type":"main","index":0}]] },
+    "Extrair Cabeçalho": { "main": [[{"node":"Ler CSV Itens","type":"main","index":0}]] },
+    "Ler CSV Itens": { "main": [[{"node":"Extrair Itens","type":"main","index":0}]] },
+    "Extrair Itens": { "main": [[{"node":"Agrega Cabeçalho","type":"main","index":0}]] },
+    "Agrega Cabeçalho": { "main": [[{"node":"Agrega Itens","type":"main","index":0}]] },
+    "Agrega Itens": { "main": [[{"node":"Modelo Local","type":"main","index":0}]] },
+    "Modelo Local": { "main": [[{"node":"Responder","type":"main","index":0}]] }
+  }
+}

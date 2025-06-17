@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head><title>Chatbot de Notas</title></head>
+<body>
+  <h1>Chat com Notas Fiscais</h1>
+  <textarea id="pergunta" placeholder="Digite sua pergunta"></textarea><br>
+  <button onclick="enviar()">Enviar</button>
+  <pre id="resposta"></pre>
+
+  <script>
+    async function enviar() {
+      const q = document.getElementById('pergunta').value;
+      const res = await fetch('https://<seu-app>.onrender.com/webhook-test/fluxo-notas-local', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ pergunta: q })
+      });
+      const j = await res.json();
+      document.getElementById('resposta').innerText = j.resposta;
+    }
+  </script>
+</body>
+</html>
